@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disparo WhatsApp</title>
+<style>
+  :root { --bg:#f4f6f5; --card:#fff; --text:#1d2421; --muted:#68736e; --line:#dfe5e2; --brand:#128c4a; --brand-2:#0e6f3a; --danger:#c43c3c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111614; --card:#1a201d; --text:#e7ece9; --muted:#97a39d; --line:#2b3430; --brand:#25b062; --brand-2:#1e9653; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:720px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:17px; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+  .step { width:24px; height:24px; border-radius:50%; background:var(--brand); color:#fff; font-size:13px; display:inline-grid; place-items:center; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .hidden { display:none !important; }
+  button { font:inherit; border:0; border-radius:8px; padding:10px 16px; cursor:pointer; background:var(--brand); color:#fff; font-weight:600; }
+  button:hover { background:var(--brand-2); }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+  button.danger { background:var(--danger); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  input[type=text], input[type=number], textarea { font:inherit; width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+  textarea { min-height:120px; resize:vertical; }
+  label { display:block; font-weight:600; margin:12px 0 6px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .row > * { flex:1 1 auto; }
+  .qr { text-align:center; }
+  .qr img { width:260px; max-width:100%; background:#fff; padding:10px; border-radius:8px; }
+  .status { display:inline-flex; align-items:center; gap:6px; font-weight:600; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#d9a400; }
+  .dot.on { background:var(--brand); }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button { flex:1; }
+  .tabs button:not(.active) { background:transparent; color:var(--text); border:1px solid var(--line); }
+  .list { max-height:340px; overflow:auto; border:1px solid var(--line); border-radius:8px; margin-top:10px; }
+  .item { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .item:last-child { border-bottom:0; }
+  .item small { color:var(--muted); display:block; }
+  .muted { color:var(--muted); font-size:13px; }
+  .drop { border:2px dashed var(--line); border-radius:10px; padding:24px; text-align:center; cursor:pointer; }
+  .drop.over { border-color:var(--brand); }
+  progress { width:100%; height:12px; }
+  .log { font:12px/1.5 ui-monospace, monospace; max-height:200px; overflow:auto; background:var(--bg); border-radius:8px; padding:10px; margin-top:10px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Disparo WhatsApp</h1>
+  <p class="sub">Conecte seu WhatsApp, escolha os contatos e envie sua mensagem.</p>
+
+  <!-- 0. Identificação -->
+  <section class="card" id="secName">
+    <h2>Qual o nome da sua empresa?</h2>
+    <div class="row">
+      <input type="text" id="nameInput" placeholder="ex: loja-da-maria">
+      <button id="nameBtn" style="flex:0 0 auto">Continuar</button>
+    </div>
+  </section>
+
+  <!-- 1. Conectar -->
+  <section class="card hidden" id="secConnect">
+    <h2><span class="step">1</span> Conectar WhatsApp</h2>
+    <p><span class="status"><span class="dot" id="dot"></span><span id="statusText">Verificando…</span></span></p>
+    <div class="qr" id="qrBox">
+      <p class="muted">No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar aparelho, e aponte para o QR abaixo.</p>
+      <img id="qrImg" alt="QR Code">
+    </div>
+    <div class="row hidden" id="connectedActions">
+      <button class="ghost" id="logoutBtn" style="flex:0 0 auto">Desconectar</button>
+    </div>
+  </section>
+
+  <!-- 2. Contatos -->
+  <section class="card hidden" id="secContacts">
+    <h2><span class="step">2</span> Escolher contatos</h2>
+    <div class="tabs">
+      <button class="active" data-tab="wa">Contatos do WhatsApp</button>
+      <button data-tab="vcf">Importar .vcf</button>
+    </div>
+
+    <div id="tabWa">
+      <button id="loadContactsBtn">Carregar meus contatos</button>
+    </div>
+    <div id="tabVcf" class="hidden">
+      <div class="drop" id="drop">
+        <strong>Clique ou arraste o arquivo .vcf aqui</strong>
+        <div class="muted">No celular: Contatos → Exportar → arquivo .vcf</div>
+      </div>
+      <input type="file" id="vcfInput" accept=".vcf,text/vcard,text/x-vcard" multiple hidden>
+    </div>
+
+    <div id="listWrap" class="hidden">
+      <div class="row" style="margin-top:14px">
+        <input type="text" id="search" placeholder="Buscar nome ou número">
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label style="margin:0;flex:0 0 auto"><input type="checkbox" id="selectAll" checked> Selecionar todos</label>
+        <span class="muted" id="countText" style="text-align:right"></span>
+      </div>
+      <div class="list" id="list"></div>
+    </div>
+  </section>
+
+  <!-- 3. Mensagem -->
+  <section class="card hidden" id="secSend">
+    <h2><span class="step">3</span> Mensagem</h2>
+    <textarea id="msg" placeholder="Olá {nome}, tudo bem? ..."></textarea>
+    <div class="muted">Use <b>{nome}</b> para colocar o primeiro nome do contato.</div>
+    <div class="row">
+      <div><label>Intervalo mínimo (seg)</label><input type="number" id="dMin" value="8" min="1"></div>
+      <div><label>Intervalo máximo (seg)</label><input type="number" id="dMax" value="20" min="1"></div>
+    </div>
+    <p class="muted">Intervalos aleatórios entre envios ajudam a evitar bloqueio do número.</p>
+    <div class="row">
+      <button id="sendBtn">Enviar</button>
+      <button id="stopBtn" class="danger hidden">Parar</button>
+    </div>
+    <div id="progressWrap" class="hidden" style="margin-top:14px">
+      <progress id="progress" value="0" max="1"></progress>
+      <div class="muted" id="progressText"></div>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+let instance = params.get('i') || localStorage.getItem('instance') || '';
+let contacts = [];      // { name, number, checked }
+let pollTimer, qrTimer, stopFlag = false;
+
+// ---------- API ----------
+async function api(method, route, body) {
+  const r = await fetch(`/api/${route}?i=${encodeURIComponent(instance)}`, {
+    method, headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try { data = await r.json(); } catch {}
+  return { ok: r.ok, status: r.status, data };
+}
+
+// ---------- 0. Nome ----------
+function slug(s) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+}
+$('nameBtn').onclick = () => {
+  const s = slug($('nameInput').value);
+  if (s.length < 3) return alert('Digite pelo menos 3 letras.');
+  instance = s;
+  start();
+};
+$('nameInput').onkeydown = (e) => e.key === 'Enter' && $('nameBtn').click();
+
+function start() {
+  try { localStorage.setItem('instance', instance); } catch {}
+  $('secName').classList.add('hidden');
+  $('secConnect').classList.remove('hidden');
+  checkState();
+}
+
+// ---------- 1. Conexão ----------
+async function checkState() {
+  clearTimeout(pollTimer);
+  const r = await api('GET', 'state');
+  const state = r.data?.instance?.state;
+  if (r.status === 404 || (!r.ok && !state)) {
+    await createInstance();
+  } else if (state === 'open') {
+    setConnected(true);
+    return;
+  } else if (!$('qrImg').src) {
+    await loadQr();
+  }
+  setConnected(false);
+  pollTimer = setTimeout(checkState, 3000);
+}
+
+async function createInstance() {
+  setStatus('Criando conexão…');
+  const r = await api('POST', 'create');
+  const b64 = r.data?.qrcode?.base64;
+  if (b64) showQr(b64); else await loadQr();
+}
+
+async function loadQr() {
+  const r = await api('GET', 'connect');
+  if (r.data?.base64) showQr(r.data.base64);
+  else if (r.data?.instance?.state === 'open') setConnected(true);
+}
+
+function showQr(b64) {
+  $('qrImg').src = b64.startsWith('data:') ? b64 : 'data:image/png;base64,' + b64;
+  clearTimeout(qrTimer);
+  qrTimer = setTimeout(() => { $('qrImg').removeAttribute('src'); }, 40000); // QR expira, força recarregar
+}
+
+function setStatus(t, on) {
+  $('statusText').textContent = t;
+  $('dot').classList.toggle('on', !!on);
+}
+
+function setConnected(on) {
+  if (on) {
+    clearTimeout(pollTimer); clearTimeout(qrTimer);
+    setStatus('Conectado', true);
+    $('qrBox').classList.add('hidden');
+    $('connectedActions').classList.remove('hidden');
+    $('secContacts').classList.remove('hidden');
+    $('secSend').classList.remove('hidden');
+  } else {
+    setStatus('Aguardando leitura do QR Code…');
+    $('qrBox').classList.remove('hidden');
+    $('connectedActions').classList.add('hidden');
+  }
+}
+
+$('logoutBtn').onclick = async () => {
+  if (!confirm('Desconectar este WhatsApp?')) return;
+  await api('DELETE', 'logout');
+  $('qrImg').removeAttribute('src');
+  $('secContacts').classList.add('hidden');
+  $('secSend').classList.add('hidden');
+  setConnected(false);
+  checkState();
+};
+
+// ---------- 2. Contatos ----------
+document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
+  $('tabWa').classList.toggle('hidden', b.dataset.tab !== 'wa');
+  $('tabVcf').classList.toggle('hidden', b.dataset.tab !== 'vcf');
+});
+
+$('loadContactsBtn').onclick = async () => {
+  const btn = $('loadContactsBtn');
+  btn.disabled = true; btn.textContent = 'Carregando…';
+  const r = await api('POST', 'contacts', { where: {} });
+  btn.disabled = false; btn.textContent = 'Recarregar contatos';
+  const arr = Array.isArray(r.data) ? r.data : (r.data?.contacts || []);
+  const list = arr
+    .filter((c) => (c.remoteJid || c.id || '').endsWith('@s.whatsapp.net'))
+    .map((c) => {
+      const number = (c.remoteJid || c.id).split('@')[0];
+      return { name: c.pushName || c.name || '', number };
+    });
+  if (!list.length) return alert('Nenhum contato encontrado. Aguarde alguns minutos após conectar (o WhatsApp sincroniza aos poucos) ou importe um .vcf.');
+  setContacts(list);
+};
+
+// .vcf
+const drop = $('drop');
+drop.onclick = () => $('vcfInput').click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); readVcf(e.dataTransfer.files); };
+$('vcfInput').onchange = (e) => readVcf(e.target.files);
+
+async function readVcf(files) {
+  let list = [];
+  for (const f of files) list = list.concat(parseVcf(await f.text()));
+  if (!list.length) return alert('Nenhum telefone encontrado no arquivo.');
+  setContacts(list);
+}
+
+function parseVcf(text) {
+  text = text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '').replace(/=\n/g, ''); // desfaz quebras de linha
+  const out = [];
+  for (const card of text.split(/BEGIN:VCARD/i).slice(1)) {
+    let name = '';
+    const tels = [];
+    for (const line of card.split('\n')) {
+      const i = line.indexOf(':');
+      if (i < 0) continue;
+      const key = line.slice(0, i).toUpperCase();
+      let val = line.slice(i + 1).trim();
+      if (/QUOTED-PRINTABLE/.test(key)) val = decodeQP(val);
+      if (key.startsWith('FN')) name = val;
+      else if (!name && /^N[;:]/.test(key + ':')) name = val.split(';').filter(Boolean).reverse().join(' ');
+      else if (key.startsWith('TEL') || /^ITEM\d+\.TEL/.test(key)) tels.push(val);
+    }
+    for (const t of tels) {
+      const n = normalize(t);
+      if (n) out.push({ name, number: n });
+    }
+  }
+  return out;
+}
+
+function decodeQP(s) {
+  try {
+    const bytes = s.replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    return decodeURIComponent(escape(bytes));
+  } catch { return s; }
+}
+
+// Deixa só dígitos; números brasileiros sem DDI ganham 55
+function normalize(t) {
+  let d = t.replace(/\D/g, '');
+  if (t.trim().startsWith('+')) return d.length >= 10 ? d : '';
+  d = d.replace(/^0+/, '');
+  if (d.length === 10 || d.length === 11) d = '55' + d;
+  return d.length >= 10 && d.length <= 15 ? d : '';
+}
+
+function setContacts(list) {
+  const seen = new Set();
+  contacts = list.filter((c) => !seen.has(c.number) && seen.add(c.number))
+    .map((c) => ({ ...c, checked: true }))
+    .sort((a, b) => (a.name || '~').localeCompare(b.name || '~'));
+  $('listWrap').classList.remove('hidden');
+  $('selectAll').checked = true;
+  $('search').value = '';
+  render();
+}
+
+function render() {
+  const q = $('search').value.toLowerCase();
+  const shown = contacts.filter((c) => !q || c.name.toLowerCase().includes(q) || c.number.includes(q));
+  $('list').innerHTML = shown.slice(0, 2000).map((c) => {
+    const idx = contacts.indexOf(c);
+    return `<label class="item"><input type="checkbox" data-i="${idx}" ${c.checked ? 'checked' : ''}>
+      <span>${esc(c.name || 'Sem nome')}<small>+${c.number}</small></span></label>`;
+  }).join('') + (shown.length > 2000 ? `<div class="item muted">+${shown.length - 2000} contatos (use a busca)</div>` : '');
+  updateCount();
+}
+
+$('list').onchange = (e) => {
+  const i = e.target.dataset.i;
+  if (i != null) { contacts[i].checked = e.target.checked; updateCount(); }
+};
+$('search').oninput = render;
+$('selectAll').onchange = (e) => {
+  const q = $('search').value.toLowerCase();
+  contacts.forEach((c) => { if (!q || c.name.toLowerCase().includes(q) || c.number.includes(q)) c.checked = e.target.checked; });
+  render();
+};
+
+function updateCount() {
+  $('countText').textContent = `${contacts.filter((c) => c.checked).length} de ${contacts.length} selecionados`;
+}
+
+const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+// ---------- 3. Envio ----------
+$('sendBtn').onclick = async () => {
+  const msg = $('msg').value.trim();
+  const sel = contacts.filter((c) => c.checked);
+  const dMin = Math.max(1, +$('dMin').value || 8);
+  const dMax = Math.max(dMin, +$('dMax').value || dMin);
+  if (!msg) return alert('Escreva a mensagem.');
+  if (!sel.length) return alert('Selecione pelo menos um contato.');
+  if (!confirm(`Enviar para ${sel.length} contato(s)?`)) return;
+
+  stopFlag = false;
+  $('sendBtn').disabled = true;
+  $('stopBtn').classList.remove('hidden');
+  $('progressWrap').classList.remove('hidden');
+  $('log').textContent = '';
+  $('progress').max = sel.length;
+  let ok = 0, fail = 0;
+
+  for (let i = 0; i < sel.length && !stopFlag; i++) {
+    const c = sel[i];
+    const first = (c.name || '').split(' ')[0];
+    const text = first ? msg.replace(/\{nome\}/gi, first) : msg.replace(/\s*\{nome\}/gi, '');
+    const r = await api('POST', 'send', { number: c.number, text });
+    if (r.ok) { ok++; log(`✔ ${c.name || ''} +${c.number}`); }
+    else { fail++; log(`✖ ${c.name || ''} +${c.number} — ${errMsg(r.data)}`); }
+    $('progress').value = i + 1;
+    $('progressText').textContent = `${i + 1}/${sel.length} · ${ok} enviados · ${fail} falhas`;
+    if (i < sel.length - 1 && !stopFlag) await sleep((dMin + Math.random() * (dMax - dMin)) * 1000);
+  }
+
+  log(stopFlag ? 'Envio interrompido.' : 'Concluído!');
+  $('sendBtn').disabled = false;
+  $('stopBtn').classList.add('hidden');
+};
+$('stopBtn').onclick = () => { stopFlag = true; $('stopBtn').classList.add('hidden'); };
+
+function errMsg(d) {
+  const m = d?.response?.message ?? d?.message ?? d?.error ?? 'erro';
+  return typeof m === 'string' ? m : JSON.stringify(m);
+}
+function log(t) { const l = $('log'); l.textContent += t + '\n'; l.scrollTop = l.scrollHeight; }
+// Sleep interrompível pelo botão Parar
+function sleep(ms) {
+  return new Promise((res) => { const t0 = Date.now(); const iv = setInterval(() => { if (stopFlag || Date.now() - t0 >= ms) { clearInterval(iv); res(); } }, 200); });
+}
+
+// ---------- init ----------
+if (instance) start();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "disparo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Site simples para o cliente conectar o WhatsApp via Evolution API e disparar mensagens",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
